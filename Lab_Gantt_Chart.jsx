@@ -50,6 +50,16 @@ const INITIAL_TASKS = [
   { id: 26, catId: "cat-5", task: "Build & test gas breakthrough column", start: "2025-05-24", end: "2025-05-30" },
 ];
 
+const STORAGE_KEY_TASKS = "gantt_tasks";
+const STORAGE_KEY_CATEGORIES = "gantt_categories";
+
+function loadFromStorage(key, fallback) {
+  try {
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : fallback;
+  } catch { return fallback; }
+}
+
 const DAY_WIDTH = 11;
 const ROW_HEIGHT = 38;
 
@@ -83,8 +93,8 @@ function buildTimeline(start, end) {
 }
 
 export default function GanttChart() {
-  const [tasks, setTasks] = useState(INITIAL_TASKS);
-  const [categories, setCategories] = useState(INITIAL_CATEGORIES);
+  const [tasks, setTasks] = useState(() => loadFromStorage(STORAGE_KEY_TASKS, INITIAL_TASKS));
+  const [categories, setCategories] = useState(() => loadFromStorage(STORAGE_KEY_CATEGORIES, INITIAL_CATEGORIES));
   const [collapsed, setCollapsed] = useState({});
   const [editingId, setEditingId] = useState(null);
   const [editField, setEditField] = useState(null);
@@ -205,6 +215,9 @@ export default function GanttChart() {
     left.addEventListener("scroll", syncFromLeft);
     return () => { chart.removeEventListener("scroll", syncFromChart); left.removeEventListener("scroll", syncFromLeft); };
   }, []);
+
+  useEffect(() => { localStorage.setItem(STORAGE_KEY_TASKS, JSON.stringify(tasks)); }, [tasks]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEY_CATEGORIES, JSON.stringify(categories)); }, [categories]);
 
   const visibleRows = [];
   categories.forEach(cat => {
