@@ -14,6 +14,12 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
+function toArray(data) {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object") return Object.values(data);
+  return [];
+}
+
 export function saveTasks(tasks) {
   set(ref(db, "tasks"), tasks);
 }
@@ -25,13 +31,13 @@ export function saveCategories(categories) {
 export function onTasksChange(callback) {
   return onValue(ref(db, "tasks"), (snapshot) => {
     const data = snapshot.val();
-    if (data) callback(data);
+    if (data) callback(toArray(data));
   });
 }
 
 export function onCategoriesChange(callback) {
   return onValue(ref(db, "categories"), (snapshot) => {
     const data = snapshot.val();
-    if (data) callback(data);
+    if (data) callback(toArray(data));
   });
 }
