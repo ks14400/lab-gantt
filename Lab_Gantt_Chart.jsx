@@ -86,7 +86,7 @@ function buildTimeline(start, end) {
 export default function GanttChart() {
   const [tasks, setTasks] = useState(INITIAL_TASKS);
   const [categories, setCategories] = useState(INITIAL_CATEGORIES);
-  const skipSync = useRef(false);
+  const loaded = useRef(false);
   const [collapsed, setCollapsed] = useState({});
   const [editingId, setEditingId] = useState(null);
   const [editField, setEditField] = useState(null);
@@ -118,16 +118,17 @@ export default function GanttChart() {
   };
 
   const updateTask = (id, field, value) => {
-    setTasks(prev => prev.map(t => {
+    const updated = tasks.map(t => {
       if (t.id !== id) return t;
-      const updated = { ...t, [field]: value };
-      if (field === "start" && toDate(value) > toDate(t.end)) updated.end = value;
-      if (field === "end" && toDate(value) < toDate(t.start)) updated.start = value;
-      return updated;
-    }));
+      const u = { ...t, [field]: value };
+      if (field === "start" && toDate(value) > toDate(t.end)) u.end = value;
+      if (field === "end" && toDate(value) < toDate(t.start)) u.start = value;
+      return u;
+    });
+    saveTasks(updated);
   };
 
-  const deleteTask = (id) => setTasks(prev => prev.filter(t => t.id !== id));
+  const deleteTask = (id) => saveTasks(tasks.filter(t => t.id !== id));
 
   const addTask = (catId) => {
     const catTasks = tasks.filter(t => t.catId === catId);
@@ -139,7 +140,7 @@ export default function GanttChart() {
     const idx = last ? tasks.indexOf(last) + 1 : tasks.length;
     const next = [...tasks];
     next.splice(idx, 0, newTask);
-    setTasks(next);
+    saveTasks(next);
     setEditingId(id);
     setEditField("task");
   };
@@ -148,22 +149,22 @@ export default function GanttChart() {
     if (!newCatName.trim()) return;
     const id = nextCatId();
     const colorIdx = categories.length % PRESET_COLORS.length;
-    setCategories(prev => [...prev, { id, name: newCatName.trim(), colorIdx }]);
+    saveCategories([...categories, { id, name: newCatName.trim(), colorIdx }]);
     setNewCatName("");
     setShowAddCat(false);
   };
 
   const deleteCategory = (catId) => {
-    setCategories(prev => prev.filter(c => c.id !== catId));
-    setTasks(prev => prev.filter(t => t.catId !== catId));
+    saveCategories(categories.filter(c => c.id !== catId));
+    saveTasks(tasks.filter(t => t.catId !== catId));
   };
 
   const renameCategory = (catId, name) => {
-    setCategories(prev => prev.map(c => c.id === catId ? { ...c, name } : c));
+    saveCategories(categories.map(c => c.id === catId ? { ...c, name } : c));
   };
 
   const cycleColor = (catId) => {
-    setCategories(prev => prev.map(c => c.id === catId ? { ...c, colorIdx: (c.colorIdx + 1) % PRESET_COLORS.length } : c));
+    saveCategories(categories.map(c => c.id === catId ? { ...c, colorIdx: (c.colorIdx + 1) % PRESET_COLORS.length } : c));
   };
 
   const handleBarMouseDown = useCallback((e, taskId, type) => {
@@ -190,7 +191,10 @@ export default function GanttChart() {
         if (ne >= toDate(dragInfo.origStart)) setTasks(prev => prev.map(t => t.id === dragInfo.taskId ? { ...t, end: toStr(ne) } : t));
       }
     };
-    const onUp = () => setDragInfo(null);
+    const onUp = () => {
+      setDragInfo(null);
+      setTasks(prev => { saveTasks(prev); return prev; });
+    };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
     return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
@@ -208,28 +212,15 @@ export default function GanttChart() {
     return () => { chart.removeEventListener("scroll", syncFromChart); left.removeEventListener("scroll", syncFromLeft); };
   }, []);
 
-  // Listen for real-time changes from Firebase
+  // Sync with Firebase
   useEffect(() => {
-    const unsubTasks = onTasksChange((data) => {
-      skipSync.current = true;
-      setTasks(data);
-    });
+    const unsubTasks = onTasksChange((data) => { setTasks(data); });
     const unsubCats = onCategoriesChange((data) => {
-      skipSync.current = true;
       setCategories(data);
+      loaded.current = true;
     });
     return () => { unsubTasks(); unsubCats(); };
   }, []);
-
-  // Save to Firebase when local state changes
-  useEffect(() => {
-    if (skipSync.current) { skipSync.current = false; return; }
-    saveTasks(tasks);
-  }, [tasks]);
-  useEffect(() => {
-    if (skipSync.current) { skipSync.current = false; return; }
-    saveCategories(categories);
-  }, [categories]);
 
   const visibleRows = [];
   categories.forEach(cat => {
